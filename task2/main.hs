@@ -190,6 +190,11 @@ space_steps = 200
 initial :: Int -> [Float]
 initial n = P.replicate (n `div` 2) 1.0 ++ P.replicate (n P.- n `div` 2) 0.0
 
+type MethodType = Float -> Float -> Float -> Float -> Int -> Int -> [Float]
+
+eulerFA :: MethodType
+eulerFA dt dx u k tn sn = undefined
+
 main :: P.IO ()
 main = do
   P.putStrLn "task2"
