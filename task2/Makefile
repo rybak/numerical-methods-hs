@@ -1,7 +1,7 @@
 HC=ghc -O9
 RM=rm -f
 
-build : fusion main
+build : main
 
 main : main.hs
 	$(HC) main.hs -o main
