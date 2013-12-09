@@ -1,201 +1,94 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, TypeOperators, MultiParamTypeClasses, RankNTypes, UnboxedTuples, FunctionalDependencies, RecordWildCards, ExistentialQuantification, BangPatterns #-}
 
+--import Prelude hiding (replicate, (++))
+import Data.List hiding (replicate, (++))
+import Data.Vector (Vector (..), (!), generate)
+import qualified Data.Vector as V
 
-import Prelude ( Show(..)
-               , error, undefined
-               , Bool(..), (&&), (||), not
-               , Int, div
-               , String
-               , Float, Double
-               , fromIntegral, realToFrac
-               , pi, sin, cos, asin, acos, atan, atan2, sqrt
-               , Monad(..), (.), ($),
-               )
-import qualified Prelude as P
- 
--- Rybak imports
-import Data.List
 import Text.Printf
-import System.Environment(getArgs)
-import Data.Sequence (index, iterateN)
+import Control.Monad
+
 import Graphics.EasyPlot
--- Algebra
- 
-class Monoid a where
-  mzero   :: a
-  mappend :: a -> a -> a
-  mconcat :: [ a ] -> a
-  mconcat = P.foldr mappend mzero
- 
--- Instances
- 
-instance Monoid Float where
-  mzero = 0
-  mappend = (P.+)
- 
-instance Monoid Double where
-  mzero = 0
-  mappend = (P.+)
- 
---
- 
-class Monoid a => Group a where
-  ginv :: a -> a
-  gsub :: a -> a -> a
-  gsub x y = mappend x (ginv y)
- 
-instance Group Float where
-  ginv = P.negate
-  gsub = (P.-)
- 
-instance Group Double where
-  ginv = P.negate
-  gsub = (P.-)
- 
----
- 
-class Group a => Ring a where -- very Monoidy
-  rone  :: a
-  rmult :: a -> a -> a
- 
-instance Ring Float where
-  rone = 1
-  rmult = (P.*)
- 
-instance Ring Double where
-  rone = 1
-  rmult = (P.*)
- 
---
- 
-class Ring a => Field a where
-  recip  :: a -> a
- 
-  (/)    :: a -> a -> a
-  (/) x y = rmult x (recip y)
- 
-(+) :: Monoid a => a -> a -> a
-(+) = mappend
- 
-negate :: Group a => a -> a
-negate = ginv
- 
-(-) :: Group a => a -> a -> a
-(-) = gsub
- 
-(*) :: Ring a => a -> a -> a
-(*) = rmult
- 
-instance Field Float where
-  recip = P.recip
-  (/) = (P./)
- 
-instance Field Double where
-  recip = P.recip
-  (/) = (P./)
- 
--- Vector Spaces
- 
-class (Group v, Field s) => VectorSpace v s | v -> s where
-  (^*) :: s -> v -> v
-  (^/) :: v -> s -> v
-  (^/) v x = (^*) (recip x) v
- 
---
- 
-class BasicVector v where
-  diagonal :: s -> v s
-  vmap     :: (s -> s) -> v s -> v s
-  vzip     :: (s -> s -> s) -> v s -> v s -> v s
-  vfold    :: (s -> s -> s) -> v s -> s
- 
-instance (Monoid s, BasicVector v) => Monoid (v s) where
-  mzero = diagonal mzero
-  mappend = vzip mappend
- 
-instance (Group s, BasicVector v) => Group (v s) where
-  ginv = vmap ginv
-  gsub = vzip gsub
- 
-instance (Field s, BasicVector v) => VectorSpace (v s) s where
-  (^*) s = vmap (s *)
-  (^/) v s = vmap (/ s) v
- 
--- 2D Vectors
- 
-data Vector2 a = Vector2 !a !a
-                deriving Show
- 
-instance BasicVector Vector2 where
-  diagonal s = Vector2 s s
-  vmap f (Vector2 x y) = Vector2 (f x) (f y)
-  vzip f (Vector2 x y) (Vector2 x' y') = Vector2 (f x x') (f y y')
-  vfold o (Vector2 x y) = x `o` y
- 
--- 3D Vectors
- 
-data Vector3 a = Vector3 !a !a !a
-                deriving Show
- 
-instance BasicVector Vector3 where
-  diagonal s = Vector3 s s s
-  vmap f (Vector3 x y z) = Vector3 (f x) (f y) (f z)
-  vzip f (Vector3 x y z) (Vector3 x' y' z') = Vector3 (f x x') (f y y') (f z z')
-  vfold o (Vector3 x y z) = x `o` y `o` z
- 
---
- 
-data Color4 a = Color4 !a !a !a !a
-                deriving Show
- 
-instance BasicVector Color4 where
-  diagonal s = Color4 s s s s
-  vmap f (Color4 x y z a) = Color4 (f x) (f y) (f z) (f a)
-  vzip f (Color4 x y z a) (Color4 x' y' z' a') = Color4 (f x x') (f y y') (f z z') (f a a')
-  vfold o (Color4 x y z a) = x `o` y `o` z `o` a
- 
--- instance Functor [] where
---   fmap = P.map
---  
--- instance Functor ((->) c) where
---   fmap f g c = f (g c)
- 
---class Applicative f where
---  pure :: a -> f a
---  (<$>) :: f (a -> b) -> f a -> f b
---instance Functor ((←) c) where
---  fmap f g c = hole
- 
---
- 
-infixr 4 +
-infixr 4 -
-infixr 5 ^*
-infixr 5 ^/
-infixr 5 *
-infixr 5 /
  
 dt, dx, u, kappa :: Float
 dt = 0.00001
 dx = 0.1
 u = 5000.0
 kappa = 300.0
-st = u * dt / dx
-re = kappa * dt / dx / dx
+st, re :: Float
+st = (u * dt) / dx
+re = (kappa * dt) / (dx * dx)
+--re = kappa * dt / dx / dx
+xl, xr :: Float
+xl = 1.0
+xr = 0.0
+
 
 time_steps, space_steps :: Int
 time_steps = 200
 space_steps = 200
 
-initial :: Int -> [Float]
-initial n = P.replicate (n `div` 2) 1.0 ++ P.replicate (n P.- n `div` 2) 0.0
+initial :: Int -> Vector Float
+initial n = V.replicate (n `div` 2) 1.0 V.++ V.replicate (n - n `div` 2) 0.0
 
-type MethodType = Float -> Float -> Float -> Float -> Int -> Int -> [Float]
+type MethodType = Int -> Int -> [Vector Float]
+type EulerStep = Vector Float -> Vector Float
 
-eulerFA :: MethodType
-eulerFA dt dx u k tn sn = undefined
+eulerForward :: EulerStep -> MethodType
+eulerForward step tn sn = take sn (iterate step (initial tn))
 
-main :: P.IO ()
-main = do
-  P.putStrLn "task2"
-  P.putStrLn $ show $ initial 10
+eulerForwardAgainstFlow, eulerForwardByFlow :: MethodType
+eulerForwardByFlow = eulerForward eulerForwardByFlowStep -- #1
+eulerForwardAgainstFlow = eulerForward eulerForwardAgainstFlowStep -- #2
+
+eulerForwardStep :: (Vector Float -> Int -> Float) -> EulerStep
+eulerForwardStep gen xs = let
+  n = V.length xs
+  generator i
+    | (i == 0)     = xl
+    | (i == n - 1) = xr
+    | otherwise    = gen xs i
+  in generate n generator
+
+eulerForwardByFlowStep, eulerForwardAgainstFlowStep :: EulerStep
+eulerForwardByFlowStep = eulerForwardStep gen where
+  gen xs i = 
+        re * ((xs ! i - 1) - 2 * (xs ! i) + (xs ! i + 1)) -
+        st * ((xs ! i + 1) - xs ! i) + xs ! i
+
+eulerForwardAgainstFlowStep = eulerForwardStep gen where
+  gen xs i =
+        re * ((xs ! i - 1) - 2 * (xs ! i) + (xs ! i + 1)) -
+        st * ((xs ! i) - xs ! i - 1) + xs ! i
+  
+myplot name xs = plot' [] X11 $ Data3D [Color Red, Style Impulses, Title name] [] xs
+main :: IO ()
+main =
+  do
+    putStrLn $ show st ++ " " ++ show re
+    writeFile "result.txt" $ join [printf "%f %f %f\n" x y z | (x, y, z) <- (ps)]
+    return ()
+  where
+    result = eulerForwardAgainstFlow time_steps space_steps
+    ys :: Vector Float
+    gx :: Int -> Vector Float
+    gx i = V.replicate space_steps ((fromIntegral i) * dt)
+    n = space_steps - 1
+    xxs = concat $ map (V.toList . gx) (nums 0 n)
+    ys = V.iterateN space_steps (\x -> x + dx) xl
+    yys = concat $ replicate space_steps (V.toList ys)
+    zzs = concat $ map (V.toList) result
+    ps = zip3 xxs yys zzs
+
+good a = and [notNaN a, notInf a]
+change a = if good a then a else 0.0
+change3 t@(a,b,c) = (change a, change b, change c)
+notNaN = not . isNaN
+notNaN3 (a, b, c) = and [(notNaN a), (notNaN b), (notNaN c)]
+
+notInf = not . isInfinite
+notInf3 (a, b, c) = and [(notInf a), (notInf b), (notInf c)]
+good3 t = and [notNaN3 t, notInf3 t]
+
+nums :: Int -> Int -> [Int]
+nums = enumFromTo
