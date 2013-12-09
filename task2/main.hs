@@ -11,7 +11,7 @@ import Control.Monad
 import Graphics.EasyPlot
  
 dt, dx, u, kappa :: Float
-dt = 0.00001
+dt = 0.000001
 dx = 0.1
 u = 5000.0
 kappa = 300.0
@@ -19,9 +19,9 @@ st, re :: Float
 st = (u * dt) / dx
 re = (kappa * dt) / (dx * dx)
 --re = kappa * dt / dx / dx
-xl, xr :: Float
-xl = 1.0
-xr = 0.0
+x_left, x_right :: Float
+x_left = 1.0
+x_right = 0.0
 
 
 time_steps, space_steps :: Int
@@ -29,13 +29,13 @@ time_steps = 200
 space_steps = 200
 
 initial :: Int -> Vector Float
-initial n = V.replicate (n `div` 2) 1.0 V.++ V.replicate (n - n `div` 2) 0.0
+initial size = V.replicate (size `div` 2) 1.0 V.++ V.replicate (size - (size `div` 2)) 0.0
 
 type MethodType = Int -> Int -> [Vector Float]
 type EulerStep = Vector Float -> Vector Float
 
 eulerForward :: EulerStep -> MethodType
-eulerForward step tn sn = take sn (iterate step (initial tn))
+eulerForward step tn sn = take tn (iterate step (initial sn))
 
 eulerForwardAgainstFlow, eulerForwardByFlow :: MethodType
 eulerForwardByFlow = eulerForward eulerForwardByFlowStep -- #1
@@ -45,8 +45,8 @@ eulerForwardStep :: (Vector Float -> Int -> Float) -> EulerStep
 eulerForwardStep gen xs = let
   n = V.length xs
   generator i
-    | (i == 0)     = xl
-    | (i == n - 1) = xr
+    | (i == 0)     = x_left
+    | (i == n - 1) = x_right
     | otherwise    = gen xs i
   in generate n generator
 
@@ -65,7 +65,8 @@ myplot name xs = plot' [] X11 $ Data3D [Color Red, Style Impulses, Title name] [
 main :: IO ()
 main =
   do
-    putStrLn $ show st ++ " " ++ show re
+    putStrLn $ show $ initial 200
+    putStrLn $ (printf "st = %6.3f re = %6.3f" st re)
     writeFile "result.txt" $ join [printf "%f %f %f\n" x y z | (x, y, z) <- (ps)]
     return ()
   where
@@ -75,7 +76,7 @@ main =
     gx i = V.replicate space_steps ((fromIntegral i) * dt)
     n = space_steps - 1
     xxs = concat $ map (V.toList . gx) (nums 0 n)
-    ys = V.iterateN space_steps (\x -> x + dx) xl
+    ys = V.iterateN space_steps (\x -> x + dx) x_left
     yys = concat $ replicate space_steps (V.toList ys)
     zzs = concat $ map (V.toList) result
     ps = zip3 xxs yys zzs
