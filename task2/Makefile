@@ -1,19 +1,12 @@
 HC=ghc -O9
+
+main :
+	$(HC) --make main.hs -o main
 RM=rm -f
 
-build : main
-
-main : main.hs
-	$(HC) main.hs -o main
-
-rebuild : clean build
-
-#fusion : Fusion.hs
-#	$(HC) Fusion.hs -c
+rebuild : clean main
 
 clean :
 	$(RM) *.hi
+	$(RM) *.o
 	$(RM) main
-
-#fresh :
-#	ls | grep -E "\\.[0-9][0-9]$$" | xargs -t -I{} rm {}
