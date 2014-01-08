@@ -37,10 +37,10 @@ space_steps = 200
 initial :: Int -> Vector FPType
 initial size = V.replicate (size `div` 2) 1.0 V.++ V.replicate (size - (size `div` 2)) 0.0
 
-data ParamsType = Container {kappa :: FPType, u :: FPType, dx :: FPType, dt :: FPType, st :: FPType, re :: FPType} deriving Show
+data Params = Container {kappa :: FPType, u :: FPType, dx :: FPType, dt :: FPType, st :: FPType, re :: FPType} deriving Show
                             
-type MethodType = ParamsType -> Int -> Int -> [Vector FPType]
-type EulerStep = ParamsType -> Vector FPType -> Vector FPType
+type MethodType = Params -> Int -> Int -> [Vector FPType]
+type EulerStep = Params -> Vector FPType -> Vector FPType
 
 eulerForward :: EulerStep -> MethodType
 eulerForward step params tn sn = take tn (iterate (step params) (initial sn))
@@ -49,7 +49,7 @@ eulerForwardAgainstFlow, eulerForwardByFlow :: MethodType
 eulerForwardByFlow = eulerForward eulerForwardByFlowStep -- #1
 eulerForwardAgainstFlow = eulerForward eulerForwardAgainstFlowStep -- #2
 
-type GenType = (ParamsType -> Vector FPType -> Int -> FPType)
+type GenType = (Params -> Vector FPType -> Int -> FPType)
 eulerForwardStep :: GenType -> EulerStep
 eulerForwardStep gen params xs = let
   n = V.length xs
@@ -125,20 +125,20 @@ defaultOptions = Options
      , optDX = defaultDX
      , optDT = defaultDT
      }
-myParams :: [String] -> IO (ParamsType, [String])
+myParams :: [String] -> IO (Params, [String])
 myParams argv = 
    case getOpt Permute options argv of
       (o,n,[]  ) -> return (fromOptions (foldl (flip id) defaultOptions o), n)
       (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
   where header = "Usage: main [OPTION...]"
 
-calcStFromParams, calcReFromParams :: ParamsType -> FPType
+calcStFromParams, calcReFromParams :: Params -> FPType
 calcStFromParams p = calcSt (u p) (dx p) (dt p)
 calcReFromParams p = calcRe (kappa p) (dx p) (dt p)
-recalcParams :: ParamsType -> ParamsType
+recalcParams :: Params -> Params
 recalcParams p = p { st = calcStFromParams p, re = calcReFromParams p}
 
-fromOptions :: Options -> ParamsType
+fromOptions :: Options -> Params
 fromOptions o = recalcParams $ Container {kappa = optKappa o, u = optU o, dx = optDX o, dt = optDT o, st = 0.0, re = 0.0}
 
 main :: IO ()
@@ -153,8 +153,8 @@ main = do
     return ()
   where
     result m p = m p time_steps space_steps
-    ys :: ParamsType -> Vector FPType
-    genTimes :: ParamsType -> Int -> Vector FPType
+    ys :: Params -> Vector FPType
+    genTimes :: Params -> Int -> Vector FPType
     genTimes o i = V.replicate space_steps ((fromIntegral i) * (dt o))
     n = time_steps - 1
     xxs p = concat $ map (V.toList . (genTimes p) ) (nums 0 n)
