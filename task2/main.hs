@@ -169,9 +169,16 @@ main = do
     (p, ss) <- myParams argv
     putStrLn $ show p
     putStrLn $ show ss
-    _ <- myGenPlot p (eulerForwardAgainstFlow, "Euler explicit against flow")
+    mapM_ (myGenPlot p) methods
     putStrLn $ (printf "st = %6.3f re = %6.3f" (st p) (re p))
     return ()
+
+methods :: [(MethodType, String)]
+methods =
+  [
+  (eulerForwardAgainstFlow, "Euler explicit against flow"),
+  (eulerForwardByFlow, "Euler explicit by flow")
+  ]
 
 good a = and [notNaN a, notInf a]
 change a = if good a then a else 0.0
