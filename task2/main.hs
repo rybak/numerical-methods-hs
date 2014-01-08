@@ -171,9 +171,9 @@ main = do
     (o, ss) <- myParams argv
     putStrLn $ show o
     putStrLn $ show ss
-    _ <- GP.plotDefault(myplot "Euler explicit against flow" $ (myGroup time_steps (ps eulerForwardAgainstFlow o)))
+    _ <- myGenPlot "Euler explicit against flow" eulerForwardAgainstFlow o
     putStrLn $ (printf "st = %6.3f re = %6.3f" (st o) (re o))
-    writeFile "result.txt" $ join [printf "%f %f %f\n" x y z | (x, y, z) <- (ps eulerForwardAgainstFlow o)]
+    --writeFile "result.txt" $ join [printf "%f %f %f\n" x y z | (x, y, z) <- (ps eulerForwardAgainstFlow o)]
     return ()
 
 good a = and [notNaN a, notInf a]
