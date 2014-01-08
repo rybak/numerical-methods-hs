@@ -21,6 +21,7 @@ import qualified Graphics.Gnuplot.Graph.ThreeDimensional as Graph3D
 -- /gnuplot
  
 import System.Environment
+import System.Exit (ExitCode)
 import System.Console.GetOpt
 
 type FPType = Double
@@ -37,7 +38,7 @@ space_steps = 200
 initial :: Int -> Vector FPType
 initial size = V.replicate (size `div` 2) 1.0 V.++ V.replicate (size - (size `div` 2)) 0.0
 
-data Params = Container {kappa :: FPType, u :: FPType, dx :: FPType, dt :: FPType, st :: FPType, re :: FPType} deriving Show
+data Params = ParamsContainer {kappa :: FPType, u :: FPType, dx :: FPType, dt :: FPType, st :: FPType, re :: FPType} deriving Show
                             
 type MethodType = Params -> Int -> Int -> [Vector FPType]
 type EulerStep = Params -> Vector FPType -> Vector FPType
@@ -74,14 +75,6 @@ eulerForwardAgainstFlowStep = eulerForwardStep gen where
 defltOpts :: Graph.C graph => Opts.T graph
 defltOpts = Opts.grid True $ Opts.key False $ Opts.deflt
 
-myplot :: String -> [[(FPType, FPType, FPType)]] -> Frame.T (Graph3D.T FPType FPType FPType)
-myplot methodTitle res = Frame.cons (
-    Opts.title methodTitle $
-    Opts.xLabel "time" $
-    Opts.yLabel "space" $
-    defltOpts
-    )
-    $ Plot3D.mesh res
 
 readFPType :: String -> FPType
 readFPType = read
@@ -125,12 +118,6 @@ defaultOptions = Options
      , optDX = defaultDX
      , optDT = defaultDT
      }
-myParams :: [String] -> IO (Params, [String])
-myParams argv = 
-   case getOpt Permute options argv of
-      (o,n,[]  ) -> return (fromOptions (foldl (flip id) defaultOptions o), n)
-      (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
-  where header = "Usage: main [OPTION...]"
 
 calcStFromParams, calcReFromParams :: Params -> FPType
 calcStFromParams p = calcSt (u p) (dx p) (dt p)
@@ -139,7 +126,44 @@ recalcParams :: Params -> Params
 recalcParams p = p { st = calcStFromParams p, re = calcReFromParams p}
 
 fromOptions :: Options -> Params
-fromOptions o = recalcParams $ Container {kappa = optKappa o, u = optU o, dx = optDX o, dt = optDT o, st = 0.0, re = 0.0}
+fromOptions o = recalcParams $ ParamsContainer {kappa = optKappa o, u = optU o, dx = optDX o, dt = optDT o, st = 0.0, re = 0.0}
+
+myParams :: [String] -> IO (Params, [String])
+myParams argv = 
+   case getOpt Permute options argv of
+      (o,n,[]  ) -> return (fromOptions (foldl (flip id) defaultOptions o), n)
+      (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
+  where header = "Usage: main [OPTION...]"
+
+type PlotType = Frame.T (Graph3D.T FPType FPType FPType)
+myplot :: String -> [[(FPType, FPType, FPType)]] -> PlotType
+myplot methodTitle res = Frame.cons (
+    Opts.title methodTitle $
+    Opts.xLabel "time" $
+    Opts.yLabel "space" $
+    defltOpts
+    )
+    $ Plot3D.mesh res
+result :: MethodType -> Params -> [Vector FPType]
+result m p = m p time_steps space_steps
+
+genTimes :: Params -> Int -> Vector FPType
+genTimes o i = V.replicate space_steps ((fromIntegral i) * (dt o))
+xxs p = concat $ map (V.toList . (genTimes p) ) (nums 0 (time_steps - 1))
+
+ys :: Params -> Vector FPType
+ys p = V.iterateN space_steps (\x -> x + (dx p)) 0.0
+yys p = concat $ replicate space_steps (V.toList (ys p))
+
+ps :: MethodType -> Params -> [(FPType, FPType, FPType)]
+ps m p = zip3 (xxs p) (yys p) (concat $ map (V.toList) (result m p))
+
+myGroup :: Int -> [a] -> [[a]]
+myGroup _ [] = []
+myGroup n xs = (take n xs) : (myGroup n (drop n xs))
+
+myGenPlot :: String -> MethodType -> Params -> IO System.Exit.ExitCode
+myGenPlot title m p = GP.plotDefault(myplot title $ (myGroup time_steps (ps m p)))
 
 main :: IO ()
 main = do
@@ -151,20 +175,6 @@ main = do
     putStrLn $ (printf "st = %6.3f re = %6.3f" (st o) (re o))
     writeFile "result.txt" $ join [printf "%f %f %f\n" x y z | (x, y, z) <- (ps eulerForwardAgainstFlow o)]
     return ()
-  where
-    result m p = m p time_steps space_steps
-    ys :: Params -> Vector FPType
-    genTimes :: Params -> Int -> Vector FPType
-    genTimes o i = V.replicate space_steps ((fromIntegral i) * (dt o))
-    n = time_steps - 1
-    xxs p = concat $ map (V.toList . (genTimes p) ) (nums 0 n)
-    ys p = V.iterateN space_steps (\x -> x + (dx p)) 0.0
-    yys p = concat $ replicate space_steps (V.toList (ys p))
-    ps m p = zip3 (xxs p) (yys p) (concat $ map (V.toList) (result m p))
-
-myGroup :: Int -> [a] -> [[a]]
-myGroup _ [] = []
-myGroup n xs = (take n xs) : (myGroup n (drop n xs))
 
 good a = and [notNaN a, notInf a]
 change a = if good a then a else 0.0
