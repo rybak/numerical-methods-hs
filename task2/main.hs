@@ -72,20 +72,15 @@ eulerForwardAgainstFlowStep = eulerForwardStep gen where
         (re p) * ((xs ! (i - 1)) - 2 * (xs ! i) + (xs ! (i + 1))) -
         (st p) * ((xs ! i) - (xs ! (i - 1))) + (xs ! i)
   
-defltOpts :: Graph.C graph => Opts.T graph
-defltOpts = Opts.grid True $ Opts.key False $ Opts.deflt
-
-
 readFPType :: String -> FPType
 readFPType = read
 
 options :: [OptDescr (Options -> Options)]
 options = [
   Option ['k'] ["kappa"]
-  (ReqArg (\ d opts -> opts { optKappa = readFPType d }) "NUM")
-  "kappa parameter",
+  (ReqArg (\ d opts -> opts { optKappa = readFPType d }) "NUM") "kappa parameter",
   Option ['u'] []
-  (ReqArg (\ d opts -> opts { optU = readFPType d }) "NUM")  "u parameter",
+  (ReqArg (\ d opts -> opts { optU = readFPType d }) "NUM") "u parameter",
   Option ['x'] ["delta-x"]
   (ReqArg (\ d opts -> opts { optDX = readFPType d }) "NUM") "space step",
   Option ['t'] ["delta-t"]
@@ -135,50 +130,52 @@ myParams argv =
       (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
   where header = "Usage: main [OPTION...]"
 
+genTimes :: Params -> Int -> Vector FPType
+genTimes p i = V.replicate space_steps ((fromIntegral i) * (dt p))
+times :: Params -> [Vector FPType]
+times p = map (genTimes p) (nums 0 (time_steps - 1))
+
+spaceCoords1 :: Params -> Vector FPType
+spaceCoords1 p = V.iterateN space_steps (\x -> x + (dx p)) 0.0
+spaceCoords :: Params -> [Vector FPType]
+spaceCoords p = replicate time_steps (spaceCoords1 p)
+
+result :: MethodType -> Params -> [Vector FPType]
+result m p = m p time_steps space_steps
+
+points :: Params -> MethodType -> [Vector (FPType, FPType, FPType)]
+points p m = zipWith3 V.zip3 (times p) (spaceCoords p) (result m p)
+
 type PlotType = Frame.T (Graph3D.T FPType FPType FPType)
-myplot :: String -> [[(FPType, FPType, FPType)]] -> PlotType
-myplot methodTitle res = Frame.cons (
-    Opts.title methodTitle $
+
+defltOpts :: Graph.C graph => Opts.T graph
+defltOpts = Opts.grid True $ Opts.key False $ Opts.deflt
+
+myplot :: String -> [Vector (FPType, FPType, FPType)] -> PlotType
+myplot title res = Frame.cons (
+    Opts.title title $
     Opts.xLabel "time" $
     Opts.yLabel "space" $
     defltOpts
     )
-    $ Plot3D.mesh res
-result :: MethodType -> Params -> [Vector FPType]
-result m p = m p time_steps space_steps
+    $ Plot3D.mesh (map V.toList res)
 
-genTimes :: Params -> Int -> Vector FPType
-genTimes o i = V.replicate space_steps ((fromIntegral i) * (dt o))
-xxs p = concat $ map (V.toList . (genTimes p) ) (nums 0 (time_steps - 1))
-
-ys :: Params -> Vector FPType
-ys p = V.iterateN space_steps (\x -> x + (dx p)) 0.0
-yys p = concat $ replicate space_steps (V.toList (ys p))
-
-ps :: MethodType -> Params -> [(FPType, FPType, FPType)]
-ps m p = zip3 (xxs p) (yys p) (concat $ map (V.toList) (result m p))
-
-myGroup :: Int -> [a] -> [[a]]
-myGroup _ [] = []
-myGroup n xs = (take n xs) : (myGroup n (drop n xs))
-
-myGenPlot :: String -> MethodType -> Params -> IO System.Exit.ExitCode
-myGenPlot title m p = GP.plotDefault(myplot title $ (myGroup time_steps (ps m p)))
+myGenPlot :: Params -> (MethodType, String) -> IO ExitCode
+myGenPlot p (m, t) = GP.plotDefault(myplot t $ (points p m))
 
 main :: IO ()
 main = do
     argv <- getArgs
-    (o, ss) <- myParams argv
-    putStrLn $ show o
+    (p, ss) <- myParams argv
+    putStrLn $ show p
     putStrLn $ show ss
-    _ <- myGenPlot "Euler explicit against flow" eulerForwardAgainstFlow o
-    putStrLn $ (printf "st = %6.3f re = %6.3f" (st o) (re o))
-    --writeFile "result.txt" $ join [printf "%f %f %f\n" x y z | (x, y, z) <- (ps eulerForwardAgainstFlow o)]
+    _ <- myGenPlot p (eulerForwardAgainstFlow, "Euler explicit against flow")
+    putStrLn $ (printf "st = %6.3f re = %6.3f" (st p) (re p))
     return ()
 
 good a = and [notNaN a, notInf a]
 change a = if good a then a else 0.0
-change3 t@(a,b,c) = (change a, change b, change c)
+change3 (a,b,c) = (change a, change b, change c)
 notNaN = not . isNaN
 notNaN3 (a, b, c) = and [(notNaN a), (notNaN b), (notNaN c)]
 
