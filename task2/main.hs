@@ -31,20 +31,33 @@ x_left, x_right :: FPType
 x_left = 1.0
 x_right = 0.0
 
-time_steps, space_steps :: Int
-time_steps = 200
+space_steps :: Int
 space_steps = 200
+
+t_1 :: FPType
+t_1 = 0.0002
+
+timeSteps :: FPType -> Int
+timeSteps dt = round (t_1 / dt)
 
 initial :: Int -> Vector FPType
 initial size = V.replicate (size `div` 2) 1.0 V.++ V.replicate (size - (size `div` 2)) 0.0
 
-data Params = ParamsContainer {kappa :: FPType, u :: FPType, dx :: FPType, dt :: FPType, st :: FPType, re :: FPType} deriving Show
+data Params = ParamsContainer
+              {
+                kappa :: FPType,
+                u :: FPType,
+                dx :: FPType,
+                dt :: FPType,
+                st :: FPType,
+                re :: FPType
+              } deriving Show
                             
-type MethodType = Params -> Int -> Int -> [Vector FPType]
+type MethodType = Params -> Int -> [Vector FPType]
 type EulerStep = Params -> Vector FPType -> Vector FPType
 
 eulerForward :: EulerStep -> MethodType
-eulerForward step params tn sn = take tn (iterate (step params) (initial sn))
+eulerForward step params sn = take (timeSteps (dt params)) (iterate (step params) (initial sn))
 
 eulerForwardAgainstFlow, eulerForwardByFlow :: MethodType
 eulerForwardByFlow = eulerForward eulerForwardByFlowStep -- #1
@@ -64,10 +77,10 @@ eulerForwardByFlowStep, eulerForwardAgainstFlowStep :: EulerStep
 eulerForwardByFlowStep = eulerForwardStep gen where
   gen :: GenType
   gen p xs i = 
-        (re p) * ((xs ! i - 1) - 2 * (xs ! i) + (xs ! i + 1)) -
-        (st p) * ((xs ! i + 1) - xs ! i) + xs ! i
+        (re p) * ((xs ! (i - 1)) - 2 * (xs ! i) + (xs ! (i + 1))) -
+        (st p) * ((xs ! (i + 1)) - xs ! i) + (xs ! i)
 
-eulerForwardAgainstFlowStep = eulerForwardStep gen where
+eulerForwardAgainstFlowStep = eulerForwardStep gen where -- <<<< ok
   gen p xs i =
         (re p) * ((xs ! (i - 1)) - 2 * (xs ! i) + (xs ! (i + 1))) -
         (st p) * ((xs ! i) - (xs ! (i - 1))) + (xs ! i)
@@ -133,15 +146,15 @@ myParams argv =
 genTimes :: Params -> Int -> Vector FPType
 genTimes p i = V.replicate space_steps ((fromIntegral i) * (dt p))
 times :: Params -> [Vector FPType]
-times p = map (genTimes p) (nums 0 (time_steps - 1))
+times p = map (genTimes p) (nums 0 ((timeSteps (dt p)) - 1))
 
 spaceCoords1 :: Params -> Vector FPType
 spaceCoords1 p = V.iterateN space_steps (\x -> x + (dx p)) 0.0
 spaceCoords :: Params -> [Vector FPType]
-spaceCoords p = replicate time_steps (spaceCoords1 p)
+spaceCoords p = replicate (timeSteps (dt p)) (spaceCoords1 p)
 
 result :: MethodType -> Params -> [Vector FPType]
-result m p = m p time_steps space_steps
+result m p = m p space_steps
 
 points :: Params -> MethodType -> [Vector (FPType, FPType, FPType)]
 points p m = zipWith3 V.zip3 (times p) (spaceCoords p) (result m p)
