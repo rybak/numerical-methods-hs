@@ -77,13 +77,13 @@ eulerForwardByFlowStep, eulerForwardAgainstFlowStep :: EulerStep
 eulerForwardByFlowStep = eulerForwardStep gen where
   gen :: GenType
   gen p xs i = 
-        (re p) * ((xs ! (i - 1)) - 2 * (xs ! i) + (xs ! (i + 1))) -
-        (st p) * ((xs ! (i + 1)) - xs ! i) + (xs ! i)
+        (re p) * ((xs ! (i - 1)) - 2 * (xs ! i) + (xs ! (i + 1))) +
+        (st p) * ((xs ! i) - (xs ! (i + 1))) + (xs ! i)
 
 eulerForwardAgainstFlowStep = eulerForwardStep gen where -- <<<< ok
   gen p xs i =
-        (re p) * ((xs ! (i - 1)) - 2 * (xs ! i) + (xs ! (i + 1))) -
-        (st p) * ((xs ! i) - (xs ! (i - 1))) + (xs ! i)
+        (re p) * ((xs ! (i - 1)) - 2 * (xs ! i) + (xs ! (i + 1))) +
+        (st p) * ((xs ! (i - 1)) - (xs ! i)) + (xs ! i)
   
 readFPType :: String -> FPType
 readFPType = read
